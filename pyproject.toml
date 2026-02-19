@@ -16,3 +16,6 @@ dependencies = [
 
 [project.scripts]
 codereview = "codereview.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

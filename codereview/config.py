@@ -43,6 +43,46 @@ PROVIDER_DEFAULTS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+GROQ_SETUP_INSTRUCTIONS: str = """
+╭──────────────────────────────────────────────────────────────╮
+│                                                              │
+│  🔑  API Key Required                                       │
+│                                                              │
+│  codereview needs an LLM API key to analyze your code.       │
+│                                                              │
+│  ⚡ FREE OPTION — Groq (recommended, no credit card):       │
+│                                                              │
+│    1. Go to  https://console.groq.com                        │
+│    2. Sign up with Google or GitHub (takes 30 seconds)       │
+│    3. Click "API Keys" → "Create API Key"                    │
+│    4. Copy the key and run:                                  │
+│                                                              │
+│       export GROQ_API_KEY="gsk_your_key_here"                │
+│       codereview --init groq                                 │
+│                                                              │
+│    To make it permanent (so you don't set it every time):    │
+│                                                              │
+│       echo 'export GROQ_API_KEY="gsk_your_key_here"'         │
+│            >> ~/.zshrc && source ~/.zshrc                     │
+│                                                              │
+│  💰 PAID OPTIONS:                                            │
+│                                                              │
+│    OpenAI:    export OPENAI_API_KEY="sk-..."                 │
+│               codereview --init openai                       │
+│                                                              │
+│    Anthropic: export ANTHROPIC_API_KEY="sk-ant-..."          │
+│               codereview --init anthropic                    │
+│                                                              │
+│  🏠 FULLY OFFLINE — Ollama (free, no API key needed):       │
+│                                                              │
+│    1. Install Ollama: https://ollama.com                     │
+│    2. Run: ollama pull llama3                                │
+│    3. Run: ollama serve                                      │
+│    4. Run: codereview --init ollama                          │
+│                                                              │
+╰──────────────────────────────────────────────────────────────╯
+"""
+
 
 class ConfigError(Exception):
     """Raised when configuration is invalid or missing."""
@@ -91,20 +131,25 @@ def validate_api_key(api_key: Optional[str], provider: str) -> bool:
         return True
 
     if not api_key:
-        env_key: str = PROVIDER_DEFAULTS.get(provider, {}).get("env_key", "API_KEY")
-        raise ConfigError(
-            f"No API key found. Set the {env_key} environment variable.\n"
-            f"  export {env_key}=your-key-here\n"
-            f"  Or: export CODEREVIEW_API_KEY=your-key-here"
-        )
+        raise ConfigError(GROQ_SETUP_INSTRUCTIONS)
 
     if len(api_key) < 10:
         raise ConfigError(
             f"API key looks too short ({len(api_key)} chars). "
-            f"Check your environment variable."
+            f"Double-check your environment variable.\n"
+            + GROQ_SETUP_INSTRUCTIONS
         )
 
     return True
+
+
+def is_first_run() -> bool:
+    """Check if this is the first time running codereview.
+
+    Returns:
+        True if no config file exists yet.
+    """
+    return not CONFIG_PATH.exists()
 
 
 def _load_config_file() -> Dict[str, Any]:

@@ -5,13 +5,18 @@ import argparse
 import logging
 from typing import Optional, Tuple
 
+from rich.console import Console
+from rich.panel import Panel
+
 from . import __version__
 from .config import (
     load_config,
     init_config,
     validate_api_key,
+    is_first_run,
     ConfigError,
     PROVIDER_DEFAULTS,
+    GROQ_SETUP_INSTRUCTIONS,
 )
 from .reviewer import review_code, ReviewResult
 from .formatter import print_review, print_error, print_info, console
@@ -24,6 +29,46 @@ from .git_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Welcome Message ───
+
+WELCOME_MESSAGE: str = """
+[bold bright_blue]🔍 Welcome to codereview![/bold bright_blue]
+
+AI-powered code review in your terminal.
+
+[bold]Quick setup (free, 60 seconds):[/bold]
+
+  [dim]1.[/dim] Go to [cyan]https://console.groq.com[/cyan]
+  [dim]2.[/dim] Sign up with Google or GitHub
+  [dim]3.[/dim] Click [bold]API Keys[/bold] → [bold]Create API Key[/bold]
+  [dim]4.[/dim] Run these two commands:
+
+     [green]export GROQ_API_KEY="gsk_your_key_here"[/green]
+     [green]codereview --init groq[/green]
+
+  [dim]5.[/dim] Review any file:
+
+     [green]codereview app.py[/green]
+
+[dim]To make the key permanent so you don't set it every session:[/dim]
+
+  [green]echo 'export GROQ_API_KEY="gsk_your_key_here"' >> ~/.zshrc[/green]
+  [green]source ~/.zshrc[/green]
+
+[dim]Other providers: --init openai | --init anthropic | --init ollama[/dim]
+"""
+
+
+def show_welcome() -> None:
+    """Display welcome message for first-time users."""
+    console.print(Panel(
+        WELCOME_MESSAGE,
+        title="[bold]First Time Setup[/bold]",
+        border_style="bright_blue",
+        padding=(1, 2),
+    ))
 
 
 # ─── Argument Parsing ───
@@ -49,9 +94,16 @@ Examples:
 
 Providers:
   codereview --init openai             Set up with OpenAI
-  codereview --init ollama             Set up with local Ollama
-  codereview --init groq               Set up with Groq (free tier)
+  codereview --init ollama             Set up with local Ollama (free, offline)
+  codereview --init groq               Set up with Groq (free, no credit card)
   codereview --init anthropic          Set up with Anthropic
+
+Free setup:
+  1. Go to https://console.groq.com
+  2. Sign up (Google or GitHub)
+  3. Create an API key
+  4. export GROQ_API_KEY="gsk_your_key_here"
+  5. codereview --init groq
         """,
     )
 
@@ -71,6 +123,11 @@ Providers:
         metavar="PROVIDER",
         choices=list(PROVIDER_DEFAULTS.keys()),
         help="Initialize config for a provider",
+    )
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Show setup instructions",
     )
     parser.add_argument(
         "--version",
@@ -95,15 +152,41 @@ def handle_init(provider: str) -> None:
         print_error(str(e))
         sys.exit(1)
 
-    print_info(f"Config initialized for {provider}")
-    print_info(f"Model: {config['model']}")
+    console.print()
+    console.print(f"[bold green]✅ Config initialized for {provider}[/bold green]")
+    console.print(f"[dim]   Model: {config['model']}[/dim]")
+    console.print()
 
     if provider == "ollama":
-        print_info("Make sure Ollama is running: ollama serve")
+        console.print("[bold]Next steps:[/bold]")
+        console.print("  1. Make sure Ollama is running: [green]ollama serve[/green]")
+        console.print("  2. Pull a model: [green]ollama pull llama3[/green]")
+        console.print("  3. Review code: [green]codereview yourfile.py[/green]")
     else:
         env_key: str = PROVIDER_DEFAULTS[provider].get("env_key", "")
-        if env_key:
-            print_info(f"Set your API key: export {env_key}=your-key-here")
+        has_key: bool = bool(config.get("api_key"))
+
+        if has_key:
+            console.print("[bold green]✅ API key detected![/bold green]")
+            console.print()
+            console.print("[bold]You're ready! Try:[/bold]")
+            console.print("  [green]codereview yourfile.py[/green]")
+        else:
+            console.print(f"[bold yellow]⚠️  No API key detected.[/bold yellow]")
+            console.print()
+            if provider == "groq":
+                console.print("[bold]Get your free key:[/bold]")
+                console.print("  1. Go to [cyan]https://console.groq.com[/cyan]")
+                console.print("  2. Sign up → API Keys → Create API Key")
+                console.print(f"  3. Run: [green]export {env_key}=\"gsk_your_key_here\"[/green]")
+                console.print()
+                console.print("[dim]To make it permanent:[/dim]")
+                console.print(f'  [green]echo \'export {env_key}="gsk_your_key_here"\' >> ~/.zshrc && source ~/.zshrc[/green]')
+            else:
+                console.print(f"[bold]Set your API key:[/bold]")
+                console.print(f"  [green]export {env_key}=\"your-key-here\"[/green]")
+
+    console.print()
 
 
 # ─── Git Requirement ───
@@ -287,10 +370,25 @@ def main() -> None:
     parser: argparse.ArgumentParser = build_parser()
     args: argparse.Namespace = parser.parse_args()
 
+    # Handle --setup
+    if args.setup:
+        show_welcome()
+        return
+
     # Handle --init
     if args.init:
         handle_init(args.init)
         return
+
+    # First run detection — show welcome if no config and no args
+    if is_first_run():
+        resolved_check: Optional[Tuple[str, str, bool]] = resolve_code(args) if (
+            args.files or args.staged or args.diff or args.last or args.stdin
+        ) else None
+
+        if resolved_check is None:
+            show_welcome()
+            return
 
     # Load and validate config
     config: dict = load_config()
@@ -299,7 +397,7 @@ def main() -> None:
     try:
         validate_api_key(config.get("api_key"), config.get("provider", "openai"))
     except ConfigError as e:
-        print_error(str(e))
+        console.print(str(e))
         sys.exit(1)
 
     # Resolve code source
@@ -307,6 +405,8 @@ def main() -> None:
 
     if resolved is None:
         parser.print_help()
+        console.print()
+        console.print("[dim]Need help? Run: codereview --setup[/dim]")
         sys.exit(0)
 
     code, filename, is_diff = resolved
