@@ -65,6 +65,14 @@ codereview app.py
 ~~~bash
 git clone https://github.com/jaydendancer12/ai-code-review.git
 cd ai-code-review
+./install.sh
+~~~
+
+Or manually:
+
+~~~bash
+git clone https://github.com/jaydendancer12/ai-code-review.git
+cd ai-code-review
 pip install -e .
 ~~~
 
