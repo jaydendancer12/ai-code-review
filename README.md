@@ -28,11 +28,12 @@ codereview app.py
 
 ### Catching real security vulnerabilities — scored 2/10
 
-[INSERT IMAGE — bad-code-review.png]
+<img width="933" height="655" alt="bad-code-review" src="https://github.com/user-attachments/assets/17e67488-9952-4cd8-be25-f04d4735a64a" />
+
 
 ### Reviewing its own source code — scored 9/10
 
-[INSERT IMAGE — self-review.png]
+<img width="915" height="619" alt="self-review" src="https://github.com/user-attachments/assets/fe4e5489-c1bc-4954-8118-03339a5f99a7" />
 
 ---
 
