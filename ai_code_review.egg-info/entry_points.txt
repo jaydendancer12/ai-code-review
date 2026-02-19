@@ -1,0 +1,2 @@
+[console_scripts]
+codereview = codereview.cli:main
